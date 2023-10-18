@@ -1,0 +1,663 @@
+---
+title: "Regression Analysis for industrial melter system"
+author: "Pok Hei Tang (CIS: cbnn16)"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+  html_notebook:
+    df_print: paged
+  word_document: default
+---
+
+
+# General Instructions
+
+Please go through the R notebook below, and carry out the requested tasks. You will provide all your answers directly into this .Rmd file. Add code into the R chunks where requested. You can create new chunks where required. Where text answers are requested, please add them directly into this document, typically below the R chunks, using R Markdown syntax as adequate.
+
+At the end, you will submit both your worked .Rmd file, and a `knitted' PDF version, through DUO.
+
+**Important**: Please ensure carefully whether all chunks compile, and also check in the knitted PDF whether all R chunks did *actually* compile, and all images that you would like to produce have *actually* been generated.  **An R chunk which does not compile will give zero marks, and a picture which does not exist will give zero marks, even if some parts of the required code are correct.**
+
+**Note**: It is appreciated that some of the requested analyses requires running R code which is not deterministic. So, you will not have full control over the output that is finally generated in the knitted document. This is fine. It is clear that the methods under investigation carry uncertainty, which is actually part of the problem tackled in this assignment. Your analysis should, however, be robust enough so that it stays in essence correct under repeated execution of your data analysis.
+
+# Reading in data
+
+We consider data from an industrial melter system. The melter is part of a disposal procedure, where a powder (waste material) is clad in glass. The melter vessel is
+continuously filled with powder, and raw glass is discretely introduced in the form of glass frit. This binary composition is heated by  induction coils, positioned around the melter vessel. Resulting from this heating procedure, the glass becomes
+molten homogeneously [(Liu et al, 2008)](https://aiche.onlinelibrary.wiley.com/doi/full/10.1002/aic.11526).
+
+Measurements of 15 temperature sensors `temp1`, ..., `temp15` (in $^{\circ} C$), the power in four
+induction coils `ind1`,...,  `ind4`,  the `voltage`, and the `viscosity` of the molten glass, were taken every 5 minutes. The sample size available for our analysis is $n=900$.
+
+We use the following R chunk to read the data in
+
+```{r}
+melter<-read.table("http://maths.dur.ac.uk/~dma0je/Data/melter.dat", header=TRUE)
+
+```
+
+If this has gone right, then the following code
+```{r}
+is.data.frame(melter)
+dim(melter)
+```
+
+should tell you that `melter` is a data frame of dimension $900 \times 21$. Otherwise something has gone wrong, and you need to start again.
+
+To get more familiar with the data frame, please also execute
+
+```{r}
+head(melter)
+colnames(melter)
+boxplot(melter)
+```
+
+
+# Task 1: Principal component analysis (10 marks)
+
+We consider initially only the 15 variables representing the temperature sensors. Please create a new data frame, called `Temp`, which contains only these 15 variables. Then carry out a principal component analysis. (Use your judgement on whether, for this purpose,  the temperature variables require scaling or not). Produce a screeplot, and also answer the following questions: How many principal components are needed to capture 90% of the total variation? How many are needed to capture 98%?
+
+**Answer:**
+
+```{r}
+# ---
+Temp <- melter[, 7:21]
+
+
+# Since the temperature detected by the sensors have same unit and similar ranges, it does not need to be scaled
+
+Temp.pr <- prcomp(Temp)
+
+var_exp = Temp.pr$sdev^2 / sum(Temp.pr$sdev^2)
+
+library(ggplot2)
+
+
+
+qplot(c(1:15), var_exp) +
+  xlab("Principal Component") +
+  ylab("Variance Explained") +
+  ggtitle("Scree Plot for principal component") +
+  geom_line() +
+  
+  ylim(0, 1)
+ 
+
+summary(Temp.pr)
+pr = 1
+p90 = 0
+while (p90 < 0.9){
+  p90 = p90 + (Temp.pr$sdev^2)[pr] /sum(Temp.pr$sdev^2)
+  pr = pr + 1
+}
+
+
+print(paste("The principal components needed for 90% is ", pr-1))
+
+
+pr = 1
+p98 = 0
+while (p98 <= 0.98){
+  p98 = p98 + (Temp.pr$sdev^2)[pr] /sum(Temp.pr$sdev^2)
+  pr = pr + 1
+}
+
+
+print(paste("The principal components needed for 98% is ", pr-1))
+
+
+```
+It needs 4 principal components to capture 90% of total variations.
+It needs 8 principal components to capture 98% of total variations.
+
+
+
+
+
+
+# Task 2: Multiple linear regression (20 marks)
+
+We consider from now on, and for the remainder of this assignment, `viscosity` as the response variable.
+
+Fit a linear regression model, with `viscosity` as response variable, and all other variables as predictors, and  produce the `summary` output of the fitted model. In this task, we are mainly interested in the standard errors of the estimated coefficients. Create a vector, with name `melter.fit.sd`, which contains the standard errors of all estimated coefficients, except the intercept. (So, this vector should have length 20). Then produce a `barplot` of these standard errors (where the height of each bar indicates the value of the standard error of the respective coefficients). Please use blue color to fill the bars of the barplot.
+
+**Answer:**
+
+```{r}
+#---
+
+melter.fit <- lm(viscosity~., data=melter)
+summary(melter.fit)
+
+melter.fit.sd <- coef(summary(melter.fit))[, "Std. Error"][2:21]
+
+barplot(melter.fit.sd, main="Standard Error of Coefficients", col="blue", las=2, ylab="standard error", xlab = "variables", cex.lab =0.7)
+
+```
+
+Now repeat this analysis, but this time using a Bayesian linear regression. Use adequate methodology to fit the Bayesian version of the linear model considered above.  It is your choice whether you would like to employ ready-to-use R functions which carry out this task for you, or whether you would like to implement this procedure from scratch, for instance using `jags`.
+
+In either case, you need to be able to extract posterior draws of the estimated parameters from the fitted object, and compute their standard deviations. Please save these standard deviations, again excluding that one for the intercept, into a vector `melter.bayes.sd`.  Produce now a barplot which displays both of `melter.fit.sd` and `melter.bayes.sd` in one plot, and allows a direct comparison  of the frequentist and Bayesian standard errors (by having the corresponding bars for both methods directly side-by-side, with the Bayesian ones in red color). The barplot should be equipped with suitable labels and legends to enable good readability.
+
+Comment on the outcome.
+
+**Answer**:
+
+```{r}
+#---
+model_string <- "model{
+  for(i in 1:N){
+    y[i] ~ dnorm(mu[i], tau)   # tau = precision=inverse variance
+    mu[i] <- beta0+beta%*%X[i,]
+  }
+  # Prior distribution on mean
+    beta0 ~ dnorm(0, 0.0001);
+    for (j in 1:20){
+      beta[j]~  dnorm(0, 0.0001)
+    }
+    tau  ~ dgamma(0.01, 0.01)
+    sigma<- 1/sqrt(tau)
+   
+}"
+```
+
+```{r}
+melterX = as.matrix(melter[,2:21])
+visc <- melter$viscosity
+
+
+para = colnames(melterX)
+
+m <- apply(melterX, 2,mean)
+S <- apply(melterX, 2, sd)
+
+
+SmelterX = scale(melterX)
+
+
+#check mean and sd of Smelter to ensure it is scaled
+apply(SmelterX, 2, mean)
+apply(SmelterX, 2, sd)
+
+```
+
+
+```{r}
+require(rjags)
+model <- jags.model(textConnection(model_string),
+            data = list(X=SmelterX, y=visc,N=dim(melterX)[1])
+          )
+
+update(model, 10000)
+
+postmod.samples = coda.samples(model, c("beta0", "beta", "sigma"), 10000)[[1]]
+
+summary(postmod.samples)
+```
+
+```{r}
+# check the values of the coefficients
+beta.jags<- rowMeans(t(postmod.samples[,1:20])/S)
+rbind(beta.jags,
+      melter.fit$coef[2:21])
+
+
+# Calculate the standard error of coefficient
+melter.bayes.sd <- round(apply(t(postmod.samples[,1:20])/S, 1,sd), digits=4)
+
+
+# plot the bar plot with 2 methods
+barplot(rbind(melter.fit.sd, 
+             melter.bayes.sd),
+        beside=TRUE, col=c("blue", "red"),
+        legend.text=c("Frequentist linear model","Bayesian linear model"), las=2, 
+        main = "Frequentist standard errors vs Bayesian standard errors",
+        xlab = "variables", ylab = "Standard Error", cex.main = 0.9, cex.lab=0.7)
+
+  
+
+
+```
+
+The Bayesian method calculates the posterior of the coefficients $(\beta)$ from $p(\beta|X, y, \sigma^2)$ which depends on $\sigma^2$. $X$ is the predictor variables, $y$ is the response variable and $\sigma^2$ is a variable that affect the mean and variance of the posterior distribution of $\beta$. Since $\sigma^2$ is unknown, the posterior of $\sigma^2$ is calculated by some assumption of the prior of $\sigma^2$. 
+
+The frequentist method estimates the coefficient $\hat\beta$ with ordinary least square where $\hat\beta =(X^TX)^{-1}X^Ty$. $X$ is the matrix with predictor variables, $y$ is the response variable.
+
+Standard error measures how precise the coefficient can achieve. Lower the standard error means less variation of the variables. It is observed from the barplot that nearly all of the bayesian standard error is less than the frequentist standard error. The variation of the coefficient from bayesian method is less than frequentist method. 
+
+
+
+
+# Task 3: The Lasso (20 marks)
+
+We would like to reduce the dimension of the currently 20-dimensional space of predictors. We employ the LASSO to carry out this task. Carry out this analysis, which should feature the following elements:
+
+ * the trace plot of the fitted coefficients, as a function of $\log(\lambda)$, with $\lambda$ denoting the penalty parameter;
+ * a graphical illustration of the cross-validation to find $\lambda$;
+ * the chosen value of $\lambda$ according to the `1-se` criterion, and a brief explanation of what this criterion actually does;
+ * the fitted coefficients according to this choice of $\lambda$.
+
+**Answer:**
+
+```{r}
+#---
+require(glmnet)
+
+# set the random seed as 2
+set.seed(2)
+
+
+# fit the data with LASSO
+melter.fit.temp= glmnet(melterX, visc, alpha=1)
+
+
+# plot the trace plot
+plot(melter.fit.temp, xvar="lambda",
+cex.axis=2, cex.lab=1.1,
+cex=1.1)
+
+# fit the data with LASSO under cross validation
+melter.cv.temp = cv.glmnet(melterX,
+visc, alpha=1 )
+
+
+#illustration of the cross-validation
+plot(melter.cv.temp)
+
+
+lambda <- melter.cv.temp$lambda.min
+log(lambda)
+
+lambda1 <- melter.cv.temp$lambda.1se 
+log(lambda1)
+
+
+
+coef(melter.cv.temp, s="lambda.1se")
+
+
+
+
+
+```
+
+The chosen value of $\lambda$ from `1-se` criterion under random seed 2 is 1.900.
+
+`1-se` criterion finds the largest value of $\lambda$ whose cross validation value is within one standard error of the minimum mean-square error(one-standard-error rule).
+
+The reason of using `1-se` is that the largest value of $\lambda$ whose cross validation value has the minimium mean-square error may give models which are not sparse enough.
+
+The `1-se` criterion does not have significant increase in mean-square error but can make models more sparse.
+
+
+Next, carry out a Bayesian analysis of the lasso.  Visualize the full posterior distributions of all coefficients (except the intercept) in terms of boxplots, and also visualize the resulting standard errors of the coefficients, again using a barplot (with red bars).
+
+Give an interpretation of the results, especially in terms of the evidence that this analysis gives in terms of inclusion/non-inclusion of certain variables.
+
+**Answer:**
+
+```{r}
+#---
+require(monomvn)
+melter.blas <- blasso(melterX, visc)
+#melter.blas
+summary(melter.blas)
+
+# plot boxplot
+plot(melter.blas, burnin=200, xlim = c(2.2, 21), ylim = c(-10, 15), las=2, 
+     xaxt = "n")
+axis(1, at= 2:21, labels = para, las=2)
+legend("topright", legend = "Bayes-lasso: MAP", pch=1, col="red")
+
+# calculate the standard error
+bsd <- as.matrix(apply(melter.blas$beta, 2,sd))
+
+
+rownames(bsd) = para
+
+# barplot with two methods
+barplot(t(bsd), col="red", las=2
+        , main= "standard errors of bayesian lasso"
+        ,cex.main=0.9
+        , ylab = "standard error"
+        , xlab = "variables"
+        , cex.lab=0.7)
+
+
+
+
+
+# inclusion variable -> red circle away from zero
+# inclusion with certainly -> red circle away from zero and boxplot w/o intersecting with zero
+
+
+```
+
+The red circle from the boxplot is the MAP. It is the mode of the distribution. If the red circles are on the zero line, the coefficients may appear zero or near to zero under the bayesian lasso. It implies that the related coefficients can be dropped. 
+
+From the boxplot above, 8 variables have non-zero MAP. Among those MAP, "ind2" and "temp2" do not intersect with zero. Also, "temp8" and "temp9" only have the outliers intersecting with zero. Therefore, "ind2", "temp2", "temp8" and "temp9" are certainly included for the prediction. The coefficients needed for prediction are between 4 and 8.
+
+On the other hand, "ind1", "ind3", "temp5", "temp10" and "temp13" are certainly not-included variables because most of the samples concentrated at zero.
+
+
+# Task 4: Bootstrap (20 marks)
+
+A second possibility to assess uncertainty of any estimator is the Bootstrap. Implement a nonparametric bootstrap procedure to assess the uncertainty of your frequentist lasso fit from Task 3.
+
+Produce boxplots of the full bootstrap distributions for all coefficients (similar as in Task 3).
+
+Then, add (green) bars with the resulting standard errors to the bar plot produced in Task 3, allowing for comparison between Bootstrap and Bayesian standard errors. Interpret the results.
+
+**Answer:**
+
+
+```{r}
+#---
+# reset the random seed
+set.seed(NULL)
+
+
+# ideally 999 test
+B <- 999 
+n <- dim(melterX)[1]
+Ynew <- matrix(0, n, B)
+X <- model.matrix(melter.fit)
+Y<- melter$viscosity
+Xnew<-list()
+p<- dim(X)[2]
+for (b in 1:B){
+  j<-sample(n, replace=TRUE)
+  Xnew[[b]]<- X[j,2:21]
+  Ynew[,b]<-Y[j]
+}
+
+
+
+melter.boot<-matrix(0, B, p)
+
+for (b in 1:B){
+  melter.cv<- cv.glmnet(Xnew[[b]], Ynew[,b], alpha=1)
+  melter.1se<-  coef(melter.cv , s="lambda.1se" )
+  melter.boot[b,]<- as.vector(melter.1se)
+  if (b%%10==0){print(b)}
+}
+
+```
+```{r}
+
+# to find the mode
+cal_mode <- function(x) {
+  uni <- unique(x)
+  tab <- tabulate(match(x, uni))
+  uni[tab == max(tab)]
+}
+
+melter.boot.mode =apply(round(melter.boot, digit=1), 2, cal_mode)
+# melter.boot.mean<- apply(melter.boot, 2, mean)
+
+#plot the boxplot
+boxplot(melter.boot[,2:21], las=2, xaxt = "n"
+        , main = "boxplot of bootstrap lasso", cex.main = 0.9)
+axis(1, at =1:20, label = para, las=2)
+abline(h =0, col ="black", lty = 2)
+try(points(c(1:20), melter.boot.mode[2:21], col="red"), silent=TRUE)
+legend("topright", legend = "mode of the bootstrap", pch=1, col="red")
+
+
+# Calculate standard error and plot barplot
+melter.boot.sd<- apply(melter.boot, 2, sd)
+
+barplot(t(cbind(bsd,
+          melter.boot.sd[2:21]))
+        , col=c("red", "green")
+        , beside=TRUE
+        , legend.text=c("Bayesian","Bootstrap")
+        , las=2
+        , main = "Standard errors of Bayesian Lasso vs Bootstrap Lasso"
+        , cex.main = 0.9
+        , ylab = "standard errors"
+        , xlab = "variables"
+        , cex.lab=0.7)
+```
+
+
+
+```{r}
+# count number of zeros in different coefficients in all bootstrap
+counts <- list()
+for (j in 2:21){
+  countzero = 1
+  for (i in 1:999){
+    if (melter.boot[i,j] == 0){countzero = countzero + 1}
+  }
+  counts<-c(counts, countzero)
+}
+
+rbind(para, counts)
+
+```
+
+From the boxplot above, 4 variables have non-zero mode. "ind2" is certainly included for prediction as there is no intersection with zero. "temp6" and "temp8"  also have high chance to be included for prediction because they only have extreme samples hitting the zero line. 
+
+The numbers of intersection with zero are counted above. It is found that "voltage", "temp2 and "temp9" are also a strong coefficient as the intersection time with zero is low.
+
+The inclusion of variables of bootstrap matches with the bayesian lasso. However, the distribution of the bootstrap lasso in the box plot is more closer around the zero than the bayesian lasso. It may be the reason why there are difference between the standard error of the nonparametric bootstrap of lasso and the bayesian lasso in the barplot above.
+
+
+
+# Task 5: Model choice (10 marks)
+
+Based on all considerations and analyses carried out so far, decide on a suitable model that you would present to a client, if you had been the statistical consultant.
+
+Formulate the model equation in mathematical notation.
+
+Refit your selected model using ordinary Least Squares. Carry out some residual diagnostics for this fitted model, and display the results. Discuss these briefly.
+
+**Answer:**
+As mentioned before, standard errors of coefficients can be used to measure the precision of the estimates. Smaller standard errors can provide more accurate result.
+According to above tasks, most of the variables from the bootstrap lasso method has lower standard error comparing with bayesian lasso methods. Bayesian lasso have around 5 variables which have lower standard error and only around 2 variables ("temp2" and "temp9") play an more important role in the prediction. Therefore, it is reasonable to recommend the bootstrap lasso to the client.
+
+Mathematical notation of bootstrap lasso:
+
+The lasso estimator($\hat{\beta_\lambda}$):
+$\hat{\beta_\lambda} =argmin_\beta{||{\bf y}-{\bf X}\beta||_2^2 + \lambda ||\beta||_1}$ 
+$= arg min_\beta\sum_{i =1}^{n}(y_i - \sum_{j=1}^{p}x_{ij}\beta_j)^2 + \lambda\sum_{j=1}^{p}|\beta_j|$
+
+where${\bf y}$ is the vector of reponse variable, ${\bf X}$ is the matrix of predictor variables and $\lambda$ is the regularization parameter
+
+Lasso can be solved by the ‘Karush–Kuhn–Tucker’ (KKT) conditions
+$\frac{1}{n}X^T(y - X \hat\beta(\lambda))=\lambda s_j$
+where $s_j = sign(\hat \beta_j)$
+
+$\hat \beta_\lambda$ can be calculated with $\hat \beta_\lambda = S_\lambda(\hat \beta^{OLS})$
+where $S_\lambda(x)=sign(x)(|x|-\lambda)_+$
+
+It is the initial lasso estimate $\hat \beta_\lambda$. New set of data is then generated by bootstrap and new lasso estimate is produced for a number of time. All the lasso estimates are stored in a matrix for further analysis 
+
+
+```{r}
+#---
+
+# Refit according to the appearance of number of zeros < 500 
+melter.boot.refit <- lm(viscosity~voltage + ind2 + temp2
+                          + temp4 + temp5 + temp6 + temp7 + temp8
+                          + temp9 + temp12 + temp14
+                        , data=melter)
+
+melter.boot.refit.sd <- coef(summary(melter.boot.refit))[, "Std. Error"][2:12]
+
+# residual diagnostics
+par(mfrow=c(1,2), cex=0.6)
+plot(melter.boot.refit$residuals)
+plot(melter.boot.refit$fitted, melter.boot.refit$residuals)
+
+summary(melter.boot.refit)
+
+
+# melter.boot.refit$fitted.values[which(melter.boot.refit$fitted.values <0)]
+
+```
+
+The selection criterion of the variables for the linear model is the intersection with zero less than 500 times (provided that the bootstrap is done for 999 times).
+
+From the plot on left hand side, it is observed that there are not any pattern from the residual. It implies that all the residual are independent. 
+
+The plot on right hand side shows the residual against predicted value, a trumpet-shape can be observed here. It implies that the homoscedasticity is violated.
+
+
+We will refer to the model produced in this task as (T5) henceforth.
+
+
+# Task 6: Extensions (20 marks)
+
+For this task, take the model (T5) as the starting point.  Then consider extensions of your model in TWO of the following THREE directions (of your choice).
+
+
+(1) Replace the temperature sensor variables in model (T5) by an adequate number of principal components (see Task 1).
+
+(2) Replace the `voltage`, and the remaining induction variables, by nonparametric terms.
+
+(3) Consider a transformation of the response variable `viscosity`.
+
+Each time, report the fitted model through adequate means. Discuss whether the corresponding extension is useful, giving quantitative or graphical evidence where possible.
+
+Give a short discussion on whether any of your extensions have led to an actual improvement compared to model (T5).
+
+**Answer:**
+
+```{r}
+#---
+
+#Case (1)
+
+melter.pr <- cbind(melter, Temp.pr$x)
+
+# refit with principal component
+melter.boot.refit.1 <- lm(viscosity~ voltage + ind2
+                        + PC1 + PC2 + PC3 + PC4 + PC5
+                        + PC6 + PC7 + PC8 
+                        , data=melter.pr)
+
+summary(melter.boot.refit.1)
+
+
+
+
+melter.boot.refit.sd.1 <- coef(summary(melter.boot.refit.1))[, "Std. Error"][2:11]
+
+
+
+#comparison with barplot
+par(mfrow=c(1,2))
+barplot(melter.boot.refit.sd, las=2
+        , main = "Standard error without extension"
+        , ylab = "stnadard error"
+        , xlab = "variables"
+        , cex.lab = 0.7
+        , cex.main=0.7)
+barplot(melter.boot.refit.sd.1, las=2
+        , main = "Standard error with extension (1)"
+        , ylab = "stnadard error"
+        , xlab = "variables"
+        , cex.lab = 0.7
+        , cex.main=0.7)
+
+
+#comparison with residual plot
+par(mfrow=c(2,2), cex=0.4)
+plot(melter.boot.refit$residuals
+     ,main = "residual plot without extension")
+plot(melter.boot.refit$fitted, melter.boot.refit$residuals
+     , main = "residual against fitted value without extension")
+plot(melter.boot.refit.1$residuals
+     ,main = "residual plot with extension (1)")
+plot(melter.boot.refit.1$fitted, melter.boot.refit.1$residuals
+     ,main = "residual against fitted value with extension (1)")
+
+
+
+
+```
+
+8 principal components are used here to cover 98% of total variance (from task 1) .
+
+Comparing to Task 5, the coefficient of determination($R^2$) drops from 0.3 to 0.28 for the extension 1 which means curve is less well-fitted using the principal component of the temperature measured by the sensors.
+
+It is observed from the barplot above that the standard error of the principal component decreases significantly for extension 1 comparing with the original temperature from the sensors. 
+
+From the residual plot above, it is found that the residuals are still independent but the homoscedasticity is still violated. The trumpet-shape does not change much.
+
+Therefore, using principal components can reduce the standard errors with little change in coefficient of determination($R^2$). It cannot deal with the violation of homoscedasticity.
+
+
+```{r}
+#Case 3
+
+#Refit with transformation due to negative value existing in boxcox
+melter.boot.refit.3 <- lm(viscosity+1e-10~voltage + ind2 + temp2
+                          + temp4 + temp5 + temp6 + temp7 + temp8
+                          + temp9 +temp12 + temp14
+                        , data=melter)
+
+require(MASS)
+boxcox(melter.boot.refit.3)
+
+
+
+```
+```{r}
+# refit with lambda
+melter.boot.refit.3 <- lm((viscosity+1e-10)^(0.4)~voltage + ind2 + temp2
+                          + temp4 + temp5 + temp6 + temp7 + temp8
+                          + temp9 +temp12 + temp14
+                        , data=melter)
+
+summary(melter.boot.refit.3)
+
+melter.boot.refit.sd.3 <- coef(summary(melter.boot.refit.3))[, "Std. Error"][2:12]
+
+
+#comparison with barplot
+par(mfrow=c(1,2))
+barplot(melter.boot.refit.sd, las=2
+        , main = "Standard error without extension"
+        , ylab = "stnadard error"
+        , xlab = "variables"
+        , cex.lab = 0.7
+        , cex.main=0.7)
+barplot(melter.boot.refit.sd.3, las=2
+        ,  main = "Standard error with extension (3)"
+        , ylab = "stnadard error"
+        , xlab = "variables"
+        , cex.lab = 0.7
+        , cex.main=0.7)
+
+#comparison with residual plot
+par(mfrow=c(2,2), cex=0.4)
+plot(melter.boot.refit$residuals
+     ,main = "residual plot without extension")
+plot(melter.boot.refit$fitted, melter.boot.refit$residuals
+     , main = "residual against fitted value without extension")
+plot(melter.boot.refit.3$residuals
+     ,main = "residual plot with extension (3)")
+plot(melter.boot.refit.3$fitted, melter.boot.refit.3$residuals
+     ,main = "residual against fitted value with extension (3)")
+
+```
+
+Since there are negative value existing in the fitted value, boxcox transformation should be done with modification to avoid calculation error for the $\lambda$ detection in boxcox. 
+
+Modified boxcox transformation:
+
+![](Capture2.png){width=30%}
+    
+where $\lambda_2$ is constant to eliminate the negative value for fitted value. $y$ is the response variable .        
+        
+Comparing to Task 5, the coefficient of determination($R^2$) drops significantly from 0.3 to 0.19 for the extension 3.
+
+It is observed from the barplot that the standard error of the coefficient is reduced but the trend does not change. The transformation taking a power of 0.3 greatly reduced the value of the response variable. So, there are decreases in standard errors.
+
+From the residual plot, the residuals are still independent and there are no violation of homoscedasticity.
+
+Therefore, transformation of response variable with boxcox can reduce the standard error and lessen the heteroscedasticity. However, in return, it greatly reduced the coefficient of determination ($R^2$).
